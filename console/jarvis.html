@@ -391,7 +391,7 @@
     </div>
   </div>
 
-  <div class="footnote">Opens real tools in new tabs · open-ended questions are answered live by Claude · nothing here reaches your OS directly</div>
+  <div class="footnote">Opens real tools in new tabs · asks Claude live when this page allows it, otherwise searches the web · nothing here reaches your OS directly</div>
 </div>
 
 <script>
@@ -410,6 +410,31 @@
     { id: "github",   label: "GitHub",        sub: "github.com",         glyph: "◇", url: "https://github.com" },
     { id: "search",   label: "Web Search",    sub: "ask to search…",     glyph: "?", url: null }
   ];
+
+  // Generic "open <site>" catalog — covers common sites beyond the
+  // pinned tiles on the left, so a spoken "open facebook" or "open
+  // youtube" has somewhere to go instead of falling through to search.
+  var SITES = {
+    facebook: "https://www.facebook.com",
+    fb: "https://www.facebook.com",
+    youtube: "https://www.youtube.com",
+    whatsapp: "https://web.whatsapp.com",
+    linkedin: "https://www.linkedin.com",
+    instagram: "https://www.instagram.com",
+    twitter: "https://twitter.com",
+    x: "https://x.com",
+    outlook: "https://outlook.com",
+    drive: "https://drive.google.com",
+    maps: "https://maps.google.com",
+    netflix: "https://www.netflix.com",
+    spotify: "https://open.spotify.com",
+    amazon: "https://www.amazon.com",
+    twitch: "https://www.twitch.tv",
+    reddit: "https://www.reddit.com",
+    slack: "https://slack.com",
+    zoom: "https://zoom.us",
+    teams: "https://teams.microsoft.com"
+  };
 
   var tilesEl = document.getElementById("tiles");
   SYSTEMS.forEach(function(sys){
@@ -532,6 +557,14 @@
     { test: /\b(task|tasks|to-?do|notes)\b/i, run: function(){ openSystem("Task Board", REPO_NOTES_URL); } },
     { test: /\bdelivery desk|ffc board|weekly board\b/i, run: function(){ openSystem("Delivery Desk", DELIVERY_DESK_URL); } },
     { test: /\bgithub\b/i, run: function(){ openSystem("GitHub", "https://github.com"); } },
+    { test: /\bopen\s+(?:the\s+|my\s+)?([a-z][a-z]*)\b/i, run: function(m){
+        var key = m[1].toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(SITES, key)){
+          openSystem(key.charAt(0).toUpperCase() + key.slice(1), SITES[key]);
+          return true;
+        }
+        return false; // not a known site — let later routes (e.g. search) have a shot
+      } },
     { test: /\btime\b/i, run: function(){
         var t = new Date().toLocaleTimeString([], { hour12: true });
         logEntry("jarvis", "It's " + t + ".");
@@ -555,7 +588,10 @@
 
     for (var i = 0; i < ROUTES.length; i++){
       var m = text.match(ROUTES[i].test);
-      if (m){ ROUTES[i].run(m); return; }
+      // A route's run() may return false to mean "matched the pattern but
+      // didn't actually handle it" (e.g. "open X" for an unknown X) —
+      // in that case keep trying later routes instead of stopping here.
+      if (m && ROUTES[i].run(m) !== false) return;
     }
 
     // Fall through: ask Claude directly for anything open-ended.
@@ -566,8 +602,15 @@
     setState("thinking");
     samplePromise.then(function(sample){
       if (!sample){
+        // Live answers only work on the claude.ai-hosted copy of this page —
+        // this build (opened as a local file or hosted elsewhere) has no
+        // bridge back to Claude. Rather than a dead end, fall back to a
+        // web search so the command still does something useful.
         setState("idle");
-        logEntry("system", "Live answers aren't available in this viewer — try opening one of the systems on the left, or open this page in claude.ai to enable them.");
+        var url = "https://www.google.com/search?q=" + encodeURIComponent(question);
+        logEntry("jarvis", "I can't reason about that on this hosted page — searching the web for it instead.", { label: "Search results", url: url });
+        speak("I can't answer that here, so I searched the web instead.");
+        try{ window.open(url, "_blank", "noopener"); } catch(e){ /* link above still works */ }
         return;
       }
       sample("You are Jarvis, " + GREETING_NAME + "'s personal assistant. Answer briefly and directly, like a capable aide, in at most 3 sentences. Question: " + question)
