@@ -50,7 +50,20 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    position: relative;
   }
+  /* Targeting-reticle corner brackets — the frame reads as "locked on" */
+  .bracket{
+    position: absolute;
+    width: 22px; height: 22px;
+    border: 2px solid var(--arc-dim);
+    opacity: 0.7;
+    pointer-events: none;
+  }
+  .bracket.tl{ top: 8px; left: 8px; border-right: none; border-bottom: none; }
+  .bracket.tr{ top: 8px; right: 8px; border-left: none; border-bottom: none; }
+  .bracket.bl{ bottom: 8px; left: 8px; border-right: none; border-top: none; }
+  .bracket.br{ bottom: 8px; right: 8px; border-left: none; border-top: none; }
 
   /* ---------- Top bar ---------- */
   .topbar{
@@ -202,7 +215,27 @@
   }
   .ring.r1{ inset: 0; animation: spin 40s linear infinite; border-style: dashed; }
   .ring.r2{ inset: 18px; animation: spin 26s linear infinite reverse; }
-  .ring.r3{ inset: 36px; border-color: var(--line); }
+  /* Tick-marked reticle ring, like a targeting or radar bezel */
+  .ring.r3{
+    inset: 36px;
+    border: none;
+    background: repeating-conic-gradient(var(--line) 0deg 1.4deg, transparent 1.4deg 9deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  }
+  /* Radar-style sweep beam — speeds up while actively listening */
+  .sweep{
+    position: absolute;
+    inset: 18px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(189,241,255,0.55), transparent 22%, transparent 100%);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    animation: spin 5s linear infinite;
+    opacity: 0.7;
+    transition: opacity 0.3s;
+  }
+  .orb-stage.active .sweep{ animation-duration: 1.4s; opacity: 1; }
   @keyframes spin{ to{ transform: rotate(360deg); } }
 
   #orb{
@@ -236,6 +269,7 @@
   }
   @media (prefers-reduced-motion: reduce){
     .ring{ animation: none !important; }
+    .sweep{ animation: none !important; }
     #orb{ animation: none !important; }
   }
 
@@ -292,6 +326,40 @@
   }
   .mute-toggle[aria-pressed="true"]{ color: var(--brass); border-color: var(--brass); }
 
+  /* ---------- Hands-free switches ---------- */
+  .switches{
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .switch{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 8px 10px;
+    cursor: pointer;
+    flex: 1;
+    min-width: 150px;
+  }
+  .switch:hover{ border-color: var(--arc-dim); }
+  .switch .led{
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    flex-shrink: 0;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  .switch[aria-pressed="true"] .led{ background: var(--good); box-shadow: 0 0 7px var(--good); }
+  .switch .switch-label{ display: flex; flex-direction: column; gap: 1px; }
+  .switch .switch-label b{ font-size: 12px; font-weight: 700; color: var(--text); }
+  .switch .switch-label span{ font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+  .switch[disabled]{ opacity: 0.45; cursor: not-allowed; }
+
   /* ---------- Log (right) ---------- */
   .log-panel{ display: flex; flex-direction: column; min-height: 320px; }
   .log{
@@ -347,6 +415,10 @@
 </style>
 
 <div class="frame">
+  <div class="bracket tl"></div>
+  <div class="bracket tr"></div>
+  <div class="bracket bl"></div>
+  <div class="bracket br"></div>
   <div class="topbar">
     <div class="wordmark">J.A.R.V.I.S. <small>PERSONAL OPERATIONS CONSOLE — B. BUTT</small></div>
     <div class="status-line">
@@ -366,9 +438,10 @@
     <div class="panel core-panel">
       <h2 style="align-self:flex-start; width:100%;">Voice Link</h2>
       <div class="orb-wrap">
-        <div class="orb-stage">
+        <div class="orb-stage" id="orb-stage">
           <div class="ring r1"></div>
           <div class="ring r2"></div>
+          <div class="sweep"></div>
           <div class="ring r3"></div>
           <button id="orb" aria-label="Talk to Jarvis"></button>
         </div>
@@ -382,6 +455,16 @@
         <button type="button" class="mute-toggle" id="mute-btn" aria-pressed="false" title="Toggle spoken replies">🔊</button>
         <button type="submit">SEND</button>
       </form>
+      <div class="switches">
+        <button type="button" class="switch" id="always-on-btn" aria-pressed="false">
+          <span class="led"></span>
+          <span class="switch-label"><b>Always Listening</b><span>mic stays open, no tapping</span></span>
+        </button>
+        <button type="button" class="switch" id="clap-btn" aria-pressed="false">
+          <span class="led"></span>
+          <span class="switch-label"><b>Clap to Wake</b><span>needs mic permission once</span></span>
+        </button>
+      </div>
     </div>
 
     <!-- Right: log -->
@@ -528,13 +611,26 @@
     if (muted && window.speechSynthesis) window.speechSynthesis.cancel();
   });
   function speak(text){
-    if (muted || !("speechSynthesis" in window)) return;
+    if (muted || !("speechSynthesis" in window)){
+      // Even without spoken output, if the mic was paused for speech it
+      // still needs to resume — otherwise "Always Listening" would go
+      // silent the first time a reply gets muted mid-utterance.
+      if (wantListening && !listening) startListening();
+      return;
+    }
     try{
+      // Pause the mic while Jarvis talks — otherwise, on a laptop without
+      // headphones, the speaker output loops right back in as a "new"
+      // voice command and Jarvis ends up talking to itself.
+      if (listening){ pausedForSpeech = true; recognition.stop(); }
       var u = new SpeechSynthesisUtterance(text);
       u.rate = 1.02;
       u.pitch = 0.85;
       u.onstart = function(){ setState("speaking"); };
-      u.onend = function(){ setState("idle"); };
+      u.onend = function(){
+        pausedForSpeech = false;
+        if (wantListening) startListening(); else setState("idle");
+      };
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(u);
     } catch(e){ /* speech synthesis not available in this viewer */ }
@@ -643,22 +739,46 @@
   var recognition = null;
   var listening = false;
   var voiceBlocked = false;
+  var wantListening = false;   // the mic should be on — either a manual tap or Always Listening
+  var pausedForSpeech = false; // mic deliberately paused while Jarvis talks, to avoid hearing itself
+  var alwaysOn = false;
+
+  var orbStage = document.getElementById("orb-stage");
+  var alwaysOnBtn = document.getElementById("always-on-btn");
+  var clapBtn = document.getElementById("clap-btn");
 
   function disableVoice(reason){
     voiceBlocked = true;
     orbHint.textContent = "Voice input isn't available on this hosted page — type a command below instead";
     logEntry("system", reason + " Typed commands work exactly the same, and I can still reply out loud.");
+    [alwaysOnBtn, clapBtn].forEach(function(btn){
+      btn.disabled = true;
+      btn.title = "Voice input isn't available on this page";
+    });
+  }
+
+  function startListening(){
+    if (!recognition || voiceBlocked) return;
+    wantListening = true;
+    if (!listening && !pausedForSpeech){
+      try{ recognition.start(); } catch(e){ /* already starting */ }
+    }
+  }
+  function stopListening(){
+    wantListening = false;
+    if (listening) recognition.stop();
   }
 
   if (SR){
     recognition = new SR();
     recognition.lang = "en-US";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true; // keep the session open across multiple commands, not just one
 
     recognition.onstart = function(){
       listening = true;
-      setState("listening");
+      orbStage.classList.add("active");
+      setState("listening", alwaysOn ? "Listening continuously — just speak" : "Listening…");
     };
     recognition.onresult = function(ev){
       var res = ev.results[ev.results.length - 1];
@@ -671,14 +791,28 @@
     };
     recognition.onerror = function(ev){
       listening = false;
-      setState("idle");
+      orbStage.classList.remove("active");
       if (!voiceBlocked && (ev.error === "not-allowed" || ev.error === "service-not-allowed" || ev.error === "network")){
         disableVoice("Speech recognition needs a network connection this page's sandbox doesn't allow, so it can't turn your voice into text here.");
+        return;
       }
+      // "no-speech" / "aborted" etc. are routine on a continuous session —
+      // onend fires right after and handles the restart.
+      if (!orb.classList.contains("speaking") && !orb.classList.contains("thinking")) setState("idle");
     };
     recognition.onend = function(){
       listening = false;
-      if (!orb.classList.contains("speaking") && !orb.classList.contains("thinking")) setState("idle");
+      orbStage.classList.remove("active");
+      if (wantListening && !pausedForSpeech && !voiceBlocked){
+        // Browsers still end a "continuous" session on their own after a
+        // stretch of silence or a network hiccup — restarting here is what
+        // actually makes Always Listening feel always-on.
+        setTimeout(function(){
+          if (wantListening && !pausedForSpeech) startListening();
+        }, 250);
+      } else if (!orb.classList.contains("speaking") && !orb.classList.contains("thinking")){
+        setState("idle");
+      }
     };
   } else {
     disableVoice("This browser doesn't support voice input.");
@@ -689,12 +823,88 @@
       document.getElementById("cmd-input").focus();
       return;
     }
-    if (listening){
-      recognition.stop();
+    if (listening) stopListening(); else startListening();
+  });
+
+  // ---------------- Always Listening ----------------
+  alwaysOnBtn.addEventListener("click", function(){
+    if (!recognition || voiceBlocked) return;
+    alwaysOn = !alwaysOn;
+    alwaysOnBtn.setAttribute("aria-pressed", String(alwaysOn));
+    if (alwaysOn){
+      logEntry("system", "Always Listening is on — the mic stays open, say a command any time.");
+      startListening();
     } else {
-      try{ recognition.start(); }
-      catch(e){ /* already started */ }
+      logEntry("system", "Always Listening is off — tap the core to talk instead.");
+      stopListening();
     }
+  });
+
+  // ---------------- Clap to Wake ----------------
+  // A lightweight volume-spike detector over the raw mic stream (separate
+  // from speech recognition, which doesn't expose raw audio). It's a
+  // simple threshold, not real clap-shape analysis, so a sharp knock or a
+  // loud clap works reliably; it can occasionally misfire on other sudden
+  // loud sounds — nudge CLAP_THRESHOLD below if that happens.
+  var CLAP_THRESHOLD = 0.35;
+  var CLAP_COOLDOWN_MS = 1200;
+  var clapArmed = false;
+  var clapStream = null, audioCtx = null, analyser = null, clapRAF = null;
+  var lastClapAt = 0;
+
+  function armClap(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      logEntry("system", "This browser can't give me raw microphone access, so Clap to Wake isn't available — Always Listening still works.");
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
+      clapStream = stream;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var source = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      clapArmed = true;
+      clapBtn.setAttribute("aria-pressed", "true");
+      logEntry("system", "Clap to Wake armed — clap once near the mic and I'll start listening.");
+      watchForClap();
+    }).catch(function(){
+      logEntry("system", "Microphone access for clap detection was declined — you can still tap the core or type.");
+    });
+  }
+
+  function disarmClap(){
+    clapArmed = false;
+    clapBtn.setAttribute("aria-pressed", "false");
+    if (clapRAF) cancelAnimationFrame(clapRAF);
+    if (clapStream) clapStream.getTracks().forEach(function(t){ t.stop(); });
+    if (audioCtx) audioCtx.close();
+    audioCtx = null; analyser = null; clapStream = null;
+    logEntry("system", "Clap to Wake is off.");
+  }
+
+  function watchForClap(){
+    var data = new Uint8Array(analyser.fftSize);
+    function tick(){
+      if (!clapArmed || !analyser) return;
+      analyser.getByteTimeDomainData(data);
+      var sum = 0;
+      for (var i = 0; i < data.length; i++){ var v = (data[i] - 128) / 128; sum += v * v; }
+      var rms = Math.sqrt(sum / data.length);
+      var now = performance.now();
+      if (rms > CLAP_THRESHOLD && !listening && (now - lastClapAt) > CLAP_COOLDOWN_MS){
+        lastClapAt = now;
+        logEntry("system", "Clap detected — listening.");
+        startListening();
+      }
+      clapRAF = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  clapBtn.addEventListener("click", function(){
+    if (!recognition || voiceBlocked) return;
+    if (clapArmed) disarmClap(); else armClap();
   });
 
 })();
