@@ -485,71 +485,120 @@
   var REPO_NOTES_URL = "https://github.com/BilalButt2/M_B_K/blob/claude/jarvis-pbifdm/notes/tasks.md";
   var DELIVERY_DESK_URL = "https://claude.ai/code/artifact/dad89650-87b4-41de-a89f-c073811fc52d";
 
-  var SYSTEMS = [
-    { id: "email",    label: "Gmail",         sub: "mail.google.com",     glyph: "@", url: "https://mail.google.com" },
-    { id: "calendar", label: "Calendar",      sub: "calendar.google.com", glyph: "▦", url: "https://calendar.google.com" },
-    { id: "tasks",    label: "Task Board",    sub: "notes/tasks.md",      glyph: "☰", url: REPO_NOTES_URL },
-    { id: "desk",     label: "Delivery Desk", sub: "FFC weekly board",    glyph: "◆", url: DELIVERY_DESK_URL },
-    { id: "github",   label: "GitHub",        sub: "github.com",         glyph: "◇", url: "https://github.com" },
-    { id: "search",   label: "Web Search",    sub: "ask to search…",     glyph: "?", url: null }
-  ];
-
-  // Generic "open <site>" catalog — covers common sites beyond the
-  // pinned tiles on the left, so a spoken "open facebook" or "open
-  // youtube" has somewhere to go instead of falling through to search.
-  var SITES = {
-    facebook: "https://www.facebook.com",
-    fb: "https://www.facebook.com",
-    youtube: "https://www.youtube.com",
-    whatsapp: "https://web.whatsapp.com",
-    linkedin: "https://www.linkedin.com",
-    instagram: "https://www.instagram.com",
-    twitter: "https://twitter.com",
-    x: "https://x.com",
-    outlook: "https://outlook.com",
-    drive: "https://drive.google.com",
-    maps: "https://maps.google.com",
-    netflix: "https://www.netflix.com",
-    spotify: "https://open.spotify.com",
-    amazon: "https://www.amazon.com",
-    twitch: "https://www.twitch.tv",
-    reddit: "https://www.reddit.com",
-    slack: "https://slack.com",
-    zoom: "https://zoom.us",
-    teams: "https://teams.microsoft.com"
+  // One catalog for every named system: what a spoken/typed name maps to
+  // (NAME_TO_KEY, so "email", "inbox" and "gmail" all resolve the same
+  // way) and what that key actually does (KEY_INFO). Kept as one table
+  // instead of separate pinned/generic lists so "open X" and "close X"
+  // both work the same way for a pinned tile or an ad-lib site name.
+  var KEY_INFO = {
+    gmail:     { label: "Gmail",         url: "https://mail.google.com",     glyph: "@", pinned: true,  sub: "mail.google.com" },
+    calendar:  { label: "Calendar",      url: "https://calendar.google.com", glyph: "▦", pinned: true,  sub: "calendar.google.com" },
+    tasks:     { label: "Task Board",    url: REPO_NOTES_URL,                glyph: "☰", pinned: true,  sub: "notes/tasks.md" },
+    desk:      { label: "Delivery Desk", url: DELIVERY_DESK_URL,             glyph: "◆", pinned: true,  sub: "FFC weekly board" },
+    github:    { label: "GitHub",        url: "https://github.com",         glyph: "◇", pinned: true,  sub: "github.com" },
+    facebook:  { label: "Facebook",      url: "https://www.facebook.com" },
+    youtube:   { label: "YouTube",       url: "https://www.youtube.com" },
+    whatsapp:  { label: "WhatsApp",      url: "https://web.whatsapp.com" },
+    linkedin:  { label: "LinkedIn",      url: "https://www.linkedin.com" },
+    instagram: { label: "Instagram",     url: "https://www.instagram.com" },
+    twitter:   { label: "Twitter",       url: "https://twitter.com" },
+    outlook:   { label: "Outlook",       url: "https://outlook.com" },
+    drive:     { label: "Google Drive",  url: "https://drive.google.com" },
+    maps:      { label: "Maps",          url: "https://maps.google.com" },
+    netflix:   { label: "Netflix",       url: "https://www.netflix.com" },
+    spotify:   { label: "Spotify",       url: "https://open.spotify.com" },
+    amazon:    { label: "Amazon",        url: "https://www.amazon.com" },
+    twitch:    { label: "Twitch",        url: "https://www.twitch.tv" },
+    reddit:    { label: "Reddit",        url: "https://www.reddit.com" },
+    slack:     { label: "Slack",         url: "https://slack.com" },
+    zoom:      { label: "Zoom",          url: "https://zoom.us" },
+    teams:     { label: "Teams",         url: "https://teams.microsoft.com" }
   };
 
+  // Every spoken/typed word that should resolve to a KEY_INFO entry —
+  // English, common aliases, and the Roman Urdu words Bilal actually
+  // uses ("email" and "mail" are the same word in Roman Urdu, so both
+  // point at gmail too).
+  var NAME_TO_KEY = {
+    gmail: "gmail", email: "gmail", mail: "gmail", "e-mail": "gmail", inbox: "gmail",
+    calendar: "calendar", schedule: "calendar",
+    tasks: "tasks", task: "tasks", "to-do": "tasks", todo: "tasks", notes: "tasks",
+    desk: "desk", "delivery desk": "desk",
+    github: "github",
+    facebook: "facebook", fb: "facebook",
+    youtube: "youtube",
+    whatsapp: "whatsapp",
+    linkedin: "linkedin",
+    instagram: "instagram",
+    twitter: "twitter", x: "twitter",
+    outlook: "outlook",
+    drive: "drive",
+    maps: "maps",
+    netflix: "netflix",
+    spotify: "spotify",
+    amazon: "amazon",
+    twitch: "twitch",
+    reddit: "reddit",
+    slack: "slack",
+    zoom: "zoom",
+    teams: "teams"
+  };
+  var NAME_KEYS_SORTED = Object.keys(NAME_TO_KEY).sort(function(a, b){ return b.length - a.length; });
+
+  function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+  // Longest name first, so "delivery desk" wins over a bare "desk" and
+  // so a short key like "x" only matches as a standalone word (\b keeps
+  // it from firing inside "next" or "fax").
+  function findSystemKey(text){
+    for (var i = 0; i < NAME_KEYS_SORTED.length; i++){
+      var name = NAME_KEYS_SORTED[i];
+      if (new RegExp("\\b" + escapeRegex(name) + "\\b", "i").test(text)) return NAME_TO_KEY[name];
+    }
+    return null;
+  }
+
+  // Windows this page itself opened, so "close gmail" / "gmail band karo"
+  // has something real to close. Browsers only let a script close a tab
+  // it opened — a tab from the address bar or another link stays put,
+  // which is a real (and sensible) limit I should say plainly if hit.
+  var openedWindows = {};
+
   var tilesEl = document.getElementById("tiles");
-  SYSTEMS.forEach(function(sys){
-    // Real <a> elements are the most reliable way to open a new tab from
+  Object.keys(KEY_INFO).filter(function(k){ return KEY_INFO[k].pinned; }).forEach(function(key){
+    var sys = KEY_INFO[key];
+    // A real <a> element is the most reliable way to open a new tab from
     // inside a sandboxed page — a JS-only window.open() can get silently
     // swallowed depending on the host's popup policy, but a genuine link
     // click is the one thing every browser/sandbox combination honors.
-    var btn = document.createElement(sys.url ? "a" : "button");
+    var btn = document.createElement("a");
     btn.className = "tile";
-    if (sys.url){
-      btn.href = sys.url;
-      btn.target = "_blank";
-      btn.rel = "noopener noreferrer";
-    } else {
-      btn.type = "button";
-    }
-    btn.dataset.id = sys.id;
+    btn.href = sys.url;
+    btn.target = "_blank";
+    btn.rel = "noopener noreferrer";
+    btn.dataset.id = key;
     btn.innerHTML =
       '<span class="glyph">' + sys.glyph + '</span>' +
       '<span class="tile-label">' + sys.label + '<span class="sub">' + sys.sub + '</span></span>';
     btn.addEventListener("click", function(){
-      if (sys.url) {
-        logEntry("jarvis", "Opening " + sys.label + "…");
-        speak("Opening " + sys.label + ".");
-      } else {
-        document.getElementById("cmd-input").focus();
-        document.getElementById("cmd-input").placeholder = "Search the web for…";
-      }
+      logEntry("jarvis", "Opening " + sys.label + "…");
+      speak("Opening " + sys.label + ".");
       flashTile(btn);
     });
     tilesEl.appendChild(btn);
   });
+  (function(){
+    var btn = document.createElement("button");
+    btn.className = "tile";
+    btn.type = "button";
+    btn.innerHTML = '<span class="glyph">?</span><span class="tile-label">Web Search<span class="sub">ask to search…</span></span>';
+    btn.addEventListener("click", function(){
+      document.getElementById("cmd-input").focus();
+      document.getElementById("cmd-input").placeholder = "Search the web for…";
+      flashTile(btn);
+    });
+    tilesEl.appendChild(btn);
+  })();
 
   function flashTile(btn){
     btn.classList.add("active");
@@ -636,31 +685,90 @@
     } catch(e){ /* speech synthesis not available in this viewer */ }
   }
 
-  // ---------------- Opening systems ----------------
+  // ---------------- Opening / closing systems ----------------
   // window.open() is a best effort — some hosting sandboxes silently
   // swallow script-triggered popups. The link in the log entry is the
   // guaranteed fallback: a real click always gets through.
-  function openSystem(label, url){
-    logEntry("jarvis", "Opening " + label + "… if nothing appears, use the link below.", { label: label, url: url });
-    speak("Opening " + label + ".");
-    try{ window.open(url, "_blank", "noopener"); } catch(e){ /* blocked by sandbox — link above still works */ }
+  function openSystem(key){
+    var sys = KEY_INFO[key];
+    logEntry("jarvis", "Opening " + sys.label + "… if nothing appears, use the link below.", { label: sys.label, url: sys.url });
+    speak("Opening " + sys.label + ".");
+    try{
+      var w = window.open(sys.url, "_blank", "noopener");
+      if (w) openedWindows[key] = w;
+    } catch(e){ /* blocked by sandbox — link above still works */ }
+  }
+
+  function closeSystem(key){
+    var sys = KEY_INFO[key];
+    var w = openedWindows[key];
+    if (w && !w.closed){
+      w.close();
+      delete openedWindows[key];
+      logEntry("jarvis", "Closed " + sys.label + ".");
+      speak("Closing " + sys.label + ".");
+    } else {
+      var msg = "I don't have " + sys.label + " open from here — a browser only lets a script close tabs it opened itself, so if you opened it another way, I can't reach it.";
+      logEntry("system", msg);
+      speak("I can't close a tab I didn't open myself.");
+    }
+  }
+
+  var CLOSE_RE = /\b(close|band)\b/i;
+  // Naming a system along with one of these words means "read/check it",
+  // not just "open it" — right now this only powers the Gmail check.
+  var CHECK_RE = /\b(check|batao|bata|kiski|kis\s*ki|kisne|kis\s*ne|who|whose|new|naya|nai|unread|koi)\b/i;
+
+  // ---------------- Gmail (real inbox, via the connected Gmail account) ----------------
+  // Only reachable on the claude.ai-hosted copy of this page — that's the
+  // only place with a bridge back to a connected account. The GitHub
+  // Pages copy (where voice actually works) has no such bridge.
+  function checkGmailBridge(){
+    if (!(window.claude && window.claude.use)) return Promise.resolve({ ok: false, reason: "unavailable" });
+    return window.claude.use("mcp").then(function(mcp){
+      if (!mcp) return { ok: false, reason: "unavailable" };
+      return mcp.callTool("Gmail", "search_threads", { query: "in:inbox", pageSize: 5, view: "THREAD_VIEW_MINIMAL" })
+        .then(function(result){
+          var threads = (result && result.payload && result.payload.threads) || [];
+          var items = threads.map(function(t){
+            var m = t.messages && t.messages[0];
+            if (!m) return null;
+            var sender = String(m.sender || "").split("<")[0].replace(/["']/g, "").trim() || m.sender || "Unknown";
+            return { sender: sender, subject: m.subject || "(no subject)" };
+          }).filter(Boolean);
+          return { ok: true, items: items };
+        })
+        .catch(function(err){ return { ok: false, reason: (err && err.code) || "error" }; });
+    });
+  }
+
+  function reportGmailUnavailable(reason){
+    var msg = reason === "unavailable"
+      ? "I can only read your real Gmail on the claude.ai version of this page — this copy has no bridge to your account. I can still open Gmail for you to check yourself."
+      : "I couldn't reach Gmail just now — try again in a moment.";
+    logEntry("system", msg);
+    speak(reason === "unavailable" ? "I can't read your inbox from here, so I'm opening Gmail instead." : "I couldn't reach Gmail just now.");
+    if (reason === "unavailable") openSystem("gmail");
+  }
+
+  function reportGmail(){
+    setState("thinking");
+    checkGmailBridge().then(function(res){
+      setState("idle");
+      if (!res.ok){ reportGmailUnavailable(res.reason); return; }
+      if (!res.items.length){
+        logEntry("jarvis", "Your inbox looks clear — nothing new.");
+        speak("Your inbox looks clear.");
+        return;
+      }
+      logEntry("jarvis", "Latest in your inbox:");
+      res.items.slice(0, 5).forEach(function(it){ logEntry("jarvis", it.sender + " — " + it.subject); });
+      speak("You have mail from " + res.items.slice(0, 3).map(function(it){ return it.sender; }).join(", ") + ".");
+    });
   }
 
   // ---------------- Command routing ----------------
   var ROUTES = [
-    { test: /\b(gmail|e-?mail|inbox)\b/i, run: function(){ openSystem("Gmail", "https://mail.google.com"); } },
-    { test: /\bcalendar|schedule\b/i, run: function(){ openSystem("Calendar", "https://calendar.google.com"); } },
-    { test: /\b(task|tasks|to-?do|notes)\b/i, run: function(){ openSystem("Task Board", REPO_NOTES_URL); } },
-    { test: /\bdelivery desk|ffc board|weekly board\b/i, run: function(){ openSystem("Delivery Desk", DELIVERY_DESK_URL); } },
-    { test: /\bgithub\b/i, run: function(){ openSystem("GitHub", "https://github.com"); } },
-    { test: /\bopen\s+(?:the\s+|my\s+)?([a-z][a-z]*)\b/i, run: function(m){
-        var key = m[1].toLowerCase();
-        if (Object.prototype.hasOwnProperty.call(SITES, key)){
-          openSystem(key.charAt(0).toUpperCase() + key.slice(1), SITES[key]);
-          return true;
-        }
-        return false; // not a known site — let later routes (e.g. search) have a shot
-      } },
     { test: /\btime\b/i, run: function(){
         var t = new Date().toLocaleTimeString([], { hour12: true });
         logEntry("jarvis", "It's " + t + ".");
@@ -682,17 +790,31 @@
     if (!text) return;
     logEntry("user", text);
 
+    // Any known system name, in either language, drives open/close first —
+    // this is the deterministic, instant path and doesn't need Claude.
+    var key = findSystemKey(text);
+    if (key){
+      if (key === "gmail" && CHECK_RE.test(text) && !CLOSE_RE.test(text)){
+        openSystem(key);
+        reportGmail();
+        return;
+      }
+      if (CLOSE_RE.test(text)){ closeSystem(key); return; }
+      openSystem(key);
+      return;
+    }
+
     for (var i = 0; i < ROUTES.length; i++){
       var m = text.match(ROUTES[i].test);
-      // A route's run() may return false to mean "matched the pattern but
-      // didn't actually handle it" (e.g. "open X" for an unknown X) —
-      // in that case keep trying later routes instead of stopping here.
       if (m && ROUTES[i].run(m) !== false) return;
     }
 
-    // Fall through: ask Claude directly for anything open-ended.
+    // Fall through: ask Claude directly for anything open-ended, in
+    // whichever language (or mix) it was asked in.
     askJarvis(text);
   }
+
+  var MAIL_WORD_RE = /\b(gmail|email|mail|inbox)\b/i;
 
   function askJarvis(question){
     setState("thinking");
@@ -700,16 +822,31 @@
       if (!sample){
         // Live answers only work on the claude.ai-hosted copy of this page —
         // this build (opened as a local file or hosted elsewhere) has no
-        // bridge back to Claude. Rather than a dead end, fall back to a
-        // web search so the command still does something useful.
+        // bridge back to Claude at all. A blind web search of a personal
+        // Urdu/English sentence rarely helps, so say so plainly instead —
+        // and for anything mail-shaped, just open Gmail so he can look himself.
         setState("idle");
+        if (MAIL_WORD_RE.test(question)){ reportGmailUnavailable("unavailable"); return; }
         var url = "https://www.google.com/search?q=" + encodeURIComponent(question);
         logEntry("jarvis", "I can't reason about that on this hosted page — searching the web for it instead.", { label: "Search results", url: url });
         speak("I can't answer that here, so I searched the web instead.");
         try{ window.open(url, "_blank", "noopener"); } catch(e){ /* link above still works */ }
         return;
       }
-      sample("You are Jarvis, " + GREETING_NAME + "'s personal assistant. Answer briefly and directly, like a capable aide, in at most 3 sentences. Question: " + question)
+      sample(
+        "You are Jarvis, " + GREETING_NAME + "'s personal assistant embedded in a webpage. " +
+        "He speaks Urdu, Roman Urdu, English, or a mix of them in the same sentence — reply in " +
+        "whichever of those he just used, matching his mix rather than switching entirely to one language. " +
+        "Answer briefly and directly, like a capable aide, in at most 3 sentences. " +
+        "If the question is about his email/inbox, use the check_gmail tool rather than guessing. " +
+        "Question: " + question,
+        { tools: [{
+            name: "check_gmail",
+            description: "Look up the most recent threads in Bilal's Gmail inbox (sender and subject for each).",
+            inputSchema: { type: "object", properties: {} },
+            execute: function(){ return checkGmailBridge(); }
+          }] }
+      )
         .then(function(res){
           setState("idle");
           logEntry("jarvis", res.text);
