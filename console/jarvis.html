@@ -1,0 +1,701 @@
+<title>Jarvis</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Titillium+Web:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /*
+    Deliberately single-theme: an instrument panel, like a cockpit or a
+    car dashboard, doesn't flip to "light mode" with the OS — it stays
+    the console it is. Colors are painted explicitly rather than tokenized
+    per light/dark, which is the intentional choice here, not an omission.
+  */
+  :root{
+    --bg: #06090d;
+    --panel: #0d141c;
+    --panel-raised: #101a24;
+    --line: #1e2c38;
+    --core: #bdf1ff;
+    --arc: #3fa9e8;
+    --arc-dim: #1c5e8c;
+    --brass: #d7a25f;
+    --text: #dce9f0;
+    --text-dim: #708391;
+    --text-faint: #4a5a66;
+    --danger: #ff6b5b;
+    --good: #6ee6a8;
+    --font-display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
+    --font-body: 'Titillium Web', 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse at 50% -10%, rgba(63,169,232,0.10), transparent 55%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+  }
+
+  ::selection{ background: var(--arc-dim); color: var(--core); }
+  button{ font-family: inherit; }
+
+  .frame{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 20px 20px 28px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .wordmark{
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(28px, 4vw, 40px);
+    letter-spacing: 0.06em;
+    color: var(--core);
+    text-shadow: 0 0 18px rgba(63,169,232,0.45);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .wordmark small{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-faint);
+    letter-spacing: 0.15em;
+    font-weight: 400;
+  }
+  .status-line{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .status-line .dot{
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--good);
+    box-shadow: 0 0 8px var(--good);
+    margin-right: 6px;
+  }
+  #clock{ color: var(--text); font-weight: 500; }
+
+  /* ---------- Main grid ---------- */
+  .console{
+    display: grid;
+    grid-template-columns: 220px 1fr 300px;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+  }
+  @media (max-width: 880px){
+    .console{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px;
+    position: relative;
+  }
+  .panel::before{
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: 4px;
+    pointer-events: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .panel h2{
+    margin: 0 0 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel h2::after{
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  /* ---------- Systems tiles (left) ---------- */
+  .tiles{ display: flex; flex-direction: column; gap: 8px; }
+  .tile{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 10px;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .tile .glyph{
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--arc-dim);
+    border-radius: 50%;
+    color: var(--arc);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  a.tile{ text-decoration: none; }
+  .tile:hover{ border-color: var(--arc); background: rgba(63,169,232,0.06); }
+  .tile:hover .glyph{ color: var(--core); border-color: var(--arc); box-shadow: 0 0 8px rgba(63,169,232,0.5); }
+  .tile.active{ border-color: var(--brass); }
+  .tile .sub{ font-family: var(--font-mono); font-weight: 400; font-size: 10px; color: var(--text-faint); display: block; }
+  .tile-label{ display: flex; flex-direction: column; gap: 1px; }
+
+  /* ---------- Center: the orb ---------- */
+  .core-panel{ display: flex; flex-direction: column; align-items: center; justify-content: space-between; }
+  .orb-wrap{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    width: 100%;
+  }
+  .orb-stage{
+    position: relative;
+    width: min(260px, 60vw);
+    height: min(260px, 60vw);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ring{
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid var(--arc-dim);
+    opacity: 0.55;
+  }
+  .ring.r1{ inset: 0; animation: spin 40s linear infinite; border-style: dashed; }
+  .ring.r2{ inset: 18px; animation: spin 26s linear infinite reverse; }
+  .ring.r3{ inset: 36px; border-color: var(--line); }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  #orb{
+    position: relative;
+    width: 58%;
+    height: 58%;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    background:
+      radial-gradient(circle at 50% 42%, #ffffff 0%, var(--core) 16%, var(--arc) 48%, var(--arc-dim) 78%, #08131c 100%);
+    box-shadow:
+      0 0 30px 6px rgba(63,169,232,0.35),
+      inset 0 0 30px rgba(0,0,0,0.35);
+    transition: box-shadow 0.3s, transform 0.15s;
+  }
+  #orb:active{ transform: scale(0.97); }
+  #orb.listening{
+    animation: pulse 1.4s ease-in-out infinite;
+    box-shadow: 0 0 55px 14px rgba(63,169,232,0.55), inset 0 0 30px rgba(0,0,0,0.3);
+  }
+  #orb.thinking{ animation: think 1s linear infinite; }
+  #orb.speaking{ animation: pulse 0.5s ease-in-out infinite; }
+  @keyframes pulse{
+    0%, 100%{ transform: scale(1); }
+    50%{ transform: scale(1.045); }
+  }
+  @keyframes think{
+    0%{ filter: hue-rotate(0deg); }
+    100%{ filter: hue-rotate(25deg); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .ring{ animation: none !important; }
+    #orb{ animation: none !important; }
+  }
+
+  .orb-caption{ text-align: center; }
+  #orb-state{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--arc);
+    text-transform: uppercase;
+    min-height: 16px;
+  }
+  #orb-hint{ font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+
+  .cmd-form{
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+  }
+  .cmd-form input{
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 3px;
+    padding: 10px 12px;
+    font-family: var(--font-body);
+    font-size: 14px;
+  }
+  .cmd-form input:focus{ outline: none; border-color: var(--arc); }
+  .cmd-form input::placeholder{ color: var(--text-faint); }
+  .cmd-form button{
+    background: var(--arc-dim);
+    border: 1px solid var(--arc);
+    color: var(--core);
+    border-radius: 3px;
+    padding: 0 16px;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .cmd-form button:hover{ background: var(--arc); color: #06090d; }
+
+  .mute-toggle{
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--text-faint);
+    border-radius: 3px;
+    padding: 0 12px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .mute-toggle[aria-pressed="true"]{ color: var(--brass); border-color: var(--brass); }
+
+  /* ---------- Log (right) ---------- */
+  .log-panel{ display: flex; flex-direction: column; min-height: 320px; }
+  .log{
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 4px;
+    max-height: 480px;
+  }
+  .entry{ font-size: 13px; line-height: 1.45; }
+  .entry .meta{
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 0.06em;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .entry.user .meta{ color: var(--brass); }
+  .entry.jarvis .meta{ color: var(--arc); }
+  .entry.system .meta{ color: var(--text-faint); }
+  .entry.user p{ color: var(--text); }
+  .entry.jarvis p{ color: var(--core); }
+  .entry.system p{ color: var(--text-dim); font-style: italic; }
+  .entry p{ margin: 0; }
+  .log-link{
+    display: inline-block;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--brass);
+    border-bottom: 1px solid var(--arc-dim);
+    text-decoration: none;
+  }
+  .log-link:hover{ color: var(--core); border-color: var(--arc); }
+
+  .log::-webkit-scrollbar{ width: 6px; }
+  .log::-webkit-scrollbar-thumb{ background: var(--line); border-radius: 3px; }
+
+  .footnote{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+  .footnote a{ color: var(--text-dim); }
+
+  [hidden]{ display: none !important; }
+</style>
+
+<div class="frame">
+  <div class="topbar">
+    <div class="wordmark">J.A.R.V.I.S. <small>PERSONAL OPERATIONS CONSOLE — B. BUTT</small></div>
+    <div class="status-line">
+      <div><span class="dot"></span>SYSTEMS ONLINE</div>
+      <div id="clock" class="font-mono">--:--:--</div>
+    </div>
+  </div>
+
+  <div class="console">
+    <!-- Left: quick systems -->
+    <div class="panel">
+      <h2>Systems</h2>
+      <div class="tiles" id="tiles"></div>
+    </div>
+
+    <!-- Center: orb + command input -->
+    <div class="panel core-panel">
+      <h2 style="align-self:flex-start; width:100%;">Voice Link</h2>
+      <div class="orb-wrap">
+        <div class="orb-stage">
+          <div class="ring r1"></div>
+          <div class="ring r2"></div>
+          <div class="ring r3"></div>
+          <button id="orb" aria-label="Talk to Jarvis"></button>
+        </div>
+        <div class="orb-caption">
+          <div id="orb-state">STANDBY</div>
+          <div id="orb-hint">Tap the core to speak, or type a command below</div>
+        </div>
+      </div>
+      <form class="cmd-form" id="cmd-form">
+        <input id="cmd-input" type="text" placeholder="Say or type a command…" autocomplete="off" />
+        <button type="button" class="mute-toggle" id="mute-btn" aria-pressed="false" title="Toggle spoken replies">🔊</button>
+        <button type="submit">SEND</button>
+      </form>
+    </div>
+
+    <!-- Right: log -->
+    <div class="panel log-panel">
+      <h2>Activity Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="footnote">Opens real tools in new tabs · asks Claude live when this page allows it, otherwise searches the web · nothing here reaches your OS directly</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var GREETING_NAME = "Bilal";
+  var REPO_NOTES_URL = "https://github.com/BilalButt2/M_B_K/blob/claude/jarvis-pbifdm/notes/tasks.md";
+  var DELIVERY_DESK_URL = "https://claude.ai/code/artifact/dad89650-87b4-41de-a89f-c073811fc52d";
+
+  var SYSTEMS = [
+    { id: "email",    label: "Gmail",         sub: "mail.google.com",     glyph: "@", url: "https://mail.google.com" },
+    { id: "calendar", label: "Calendar",      sub: "calendar.google.com", glyph: "▦", url: "https://calendar.google.com" },
+    { id: "tasks",    label: "Task Board",    sub: "notes/tasks.md",      glyph: "☰", url: REPO_NOTES_URL },
+    { id: "desk",     label: "Delivery Desk", sub: "FFC weekly board",    glyph: "◆", url: DELIVERY_DESK_URL },
+    { id: "github",   label: "GitHub",        sub: "github.com",         glyph: "◇", url: "https://github.com" },
+    { id: "search",   label: "Web Search",    sub: "ask to search…",     glyph: "?", url: null }
+  ];
+
+  // Generic "open <site>" catalog — covers common sites beyond the
+  // pinned tiles on the left, so a spoken "open facebook" or "open
+  // youtube" has somewhere to go instead of falling through to search.
+  var SITES = {
+    facebook: "https://www.facebook.com",
+    fb: "https://www.facebook.com",
+    youtube: "https://www.youtube.com",
+    whatsapp: "https://web.whatsapp.com",
+    linkedin: "https://www.linkedin.com",
+    instagram: "https://www.instagram.com",
+    twitter: "https://twitter.com",
+    x: "https://x.com",
+    outlook: "https://outlook.com",
+    drive: "https://drive.google.com",
+    maps: "https://maps.google.com",
+    netflix: "https://www.netflix.com",
+    spotify: "https://open.spotify.com",
+    amazon: "https://www.amazon.com",
+    twitch: "https://www.twitch.tv",
+    reddit: "https://www.reddit.com",
+    slack: "https://slack.com",
+    zoom: "https://zoom.us",
+    teams: "https://teams.microsoft.com"
+  };
+
+  var tilesEl = document.getElementById("tiles");
+  SYSTEMS.forEach(function(sys){
+    // Real <a> elements are the most reliable way to open a new tab from
+    // inside a sandboxed page — a JS-only window.open() can get silently
+    // swallowed depending on the host's popup policy, but a genuine link
+    // click is the one thing every browser/sandbox combination honors.
+    var btn = document.createElement(sys.url ? "a" : "button");
+    btn.className = "tile";
+    if (sys.url){
+      btn.href = sys.url;
+      btn.target = "_blank";
+      btn.rel = "noopener noreferrer";
+    } else {
+      btn.type = "button";
+    }
+    btn.dataset.id = sys.id;
+    btn.innerHTML =
+      '<span class="glyph">' + sys.glyph + '</span>' +
+      '<span class="tile-label">' + sys.label + '<span class="sub">' + sys.sub + '</span></span>';
+    btn.addEventListener("click", function(){
+      if (sys.url) {
+        logEntry("jarvis", "Opening " + sys.label + "…");
+        speak("Opening " + sys.label + ".");
+      } else {
+        document.getElementById("cmd-input").focus();
+        document.getElementById("cmd-input").placeholder = "Search the web for…";
+      }
+      flashTile(btn);
+    });
+    tilesEl.appendChild(btn);
+  });
+
+  function flashTile(btn){
+    btn.classList.add("active");
+    setTimeout(function(){ btn.classList.remove("active"); }, 900);
+  }
+
+  // ---------------- Clock ----------------
+  function tick(){
+    var d = new Date();
+    document.getElementById("clock").textContent = d.toLocaleTimeString([], { hour12: false });
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  // ---------------- Log ----------------
+  var logEl = document.getElementById("log");
+  function logEntry(kind, text, link){
+    var e = document.createElement("div");
+    e.className = "entry " + kind;
+    var time = new Date().toLocaleTimeString([], { hour12: false });
+    var who = kind === "user" ? GREETING_NAME.toUpperCase() : kind === "jarvis" ? "JARVIS" : "SYSTEM";
+    e.innerHTML = '<span class="meta">' + time + ' · ' + who + '</span><p></p>';
+    e.querySelector("p").textContent = text;
+    if (link){
+      var a = document.createElement("a");
+      a.href = link.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.className = "log-link";
+      a.textContent = link.label + " →";
+      e.appendChild(a);
+    }
+    logEl.appendChild(e);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  logEntry("system", "Console initialized.");
+  logEntry("jarvis", "Good to see you, " + GREETING_NAME + ". Systems are online. Say a command, or ask me anything.");
+
+  // ---------------- Orb state ----------------
+  var orb = document.getElementById("orb");
+  var orbState = document.getElementById("orb-state");
+  var orbHint = document.getElementById("orb-hint");
+  function setState(state, hint){
+    orb.classList.remove("listening", "thinking", "speaking");
+    if (state !== "idle") orb.classList.add(state);
+    var labels = { idle: "STANDBY", listening: "LISTENING…", thinking: "PROCESSING…", speaking: "RESPONDING…" };
+    orbState.textContent = labels[state] || state.toUpperCase();
+    if (hint) orbHint.textContent = hint;
+  }
+
+  // ---------------- Speech synthesis (spoken replies) ----------------
+  var muted = false;
+  var muteBtn = document.getElementById("mute-btn");
+  muteBtn.addEventListener("click", function(){
+    muted = !muted;
+    muteBtn.setAttribute("aria-pressed", String(muted));
+    muteBtn.textContent = muted ? "🔇" : "🔊";
+    if (muted && window.speechSynthesis) window.speechSynthesis.cancel();
+  });
+  function speak(text){
+    if (muted || !("speechSynthesis" in window)) return;
+    try{
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.02;
+      u.pitch = 0.85;
+      u.onstart = function(){ setState("speaking"); };
+      u.onend = function(){ setState("idle"); };
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch(e){ /* speech synthesis not available in this viewer */ }
+  }
+
+  // ---------------- Opening systems ----------------
+  // window.open() is a best effort — some hosting sandboxes silently
+  // swallow script-triggered popups. The link in the log entry is the
+  // guaranteed fallback: a real click always gets through.
+  function openSystem(label, url){
+    logEntry("jarvis", "Opening " + label + "… if nothing appears, use the link below.", { label: label, url: url });
+    speak("Opening " + label + ".");
+    try{ window.open(url, "_blank", "noopener"); } catch(e){ /* blocked by sandbox — link above still works */ }
+  }
+
+  // ---------------- Command routing ----------------
+  var ROUTES = [
+    { test: /\b(gmail|e-?mail|inbox)\b/i, run: function(){ openSystem("Gmail", "https://mail.google.com"); } },
+    { test: /\bcalendar|schedule\b/i, run: function(){ openSystem("Calendar", "https://calendar.google.com"); } },
+    { test: /\b(task|tasks|to-?do|notes)\b/i, run: function(){ openSystem("Task Board", REPO_NOTES_URL); } },
+    { test: /\bdelivery desk|ffc board|weekly board\b/i, run: function(){ openSystem("Delivery Desk", DELIVERY_DESK_URL); } },
+    { test: /\bgithub\b/i, run: function(){ openSystem("GitHub", "https://github.com"); } },
+    { test: /\bopen\s+(?:the\s+|my\s+)?([a-z][a-z]*)\b/i, run: function(m){
+        var key = m[1].toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(SITES, key)){
+          openSystem(key.charAt(0).toUpperCase() + key.slice(1), SITES[key]);
+          return true;
+        }
+        return false; // not a known site — let later routes (e.g. search) have a shot
+      } },
+    { test: /\btime\b/i, run: function(){
+        var t = new Date().toLocaleTimeString([], { hour12: true });
+        logEntry("jarvis", "It's " + t + ".");
+        speak("It's " + t + ".");
+      } },
+    { test: /^\s*(search|google|look up)\s+(for\s+)?(.+)/i, run: function(m){
+        var q = m[3];
+        var url = "https://www.google.com/search?q=" + encodeURIComponent(q);
+        logEntry("jarvis", 'Searching the web for "' + q + '" — if nothing appears, use the link below.', { label: "Search results", url: url });
+        speak("Searching for " + q + ".");
+        try{ window.open(url, "_blank", "noopener"); } catch(e){ /* blocked by sandbox — link above still works */ }
+      } }
+  ];
+
+  var samplePromise = (window.claude && window.claude.use) ? window.claude.use("sample") : Promise.resolve(null);
+
+  function handleCommand(raw){
+    var text = raw.trim();
+    if (!text) return;
+    logEntry("user", text);
+
+    for (var i = 0; i < ROUTES.length; i++){
+      var m = text.match(ROUTES[i].test);
+      // A route's run() may return false to mean "matched the pattern but
+      // didn't actually handle it" (e.g. "open X" for an unknown X) —
+      // in that case keep trying later routes instead of stopping here.
+      if (m && ROUTES[i].run(m) !== false) return;
+    }
+
+    // Fall through: ask Claude directly for anything open-ended.
+    askJarvis(text);
+  }
+
+  function askJarvis(question){
+    setState("thinking");
+    samplePromise.then(function(sample){
+      if (!sample){
+        // Live answers only work on the claude.ai-hosted copy of this page —
+        // this build (opened as a local file or hosted elsewhere) has no
+        // bridge back to Claude. Rather than a dead end, fall back to a
+        // web search so the command still does something useful.
+        setState("idle");
+        var url = "https://www.google.com/search?q=" + encodeURIComponent(question);
+        logEntry("jarvis", "I can't reason about that on this hosted page — searching the web for it instead.", { label: "Search results", url: url });
+        speak("I can't answer that here, so I searched the web instead.");
+        try{ window.open(url, "_blank", "noopener"); } catch(e){ /* link above still works */ }
+        return;
+      }
+      sample("You are Jarvis, " + GREETING_NAME + "'s personal assistant. Answer briefly and directly, like a capable aide, in at most 3 sentences. Question: " + question)
+        .then(function(res){
+          setState("idle");
+          logEntry("jarvis", res.text);
+          speak(res.text);
+        })
+        .catch(function(err){
+          setState("idle");
+          var msg = (err && err.code === "rate_limited")
+            ? "I'm being asked too much at once — try again in a moment."
+            : "I couldn't reach my reasoning core just now.";
+          logEntry("system", msg);
+        });
+    });
+  }
+
+  // ---------------- Text form ----------------
+  document.getElementById("cmd-form").addEventListener("submit", function(ev){
+    ev.preventDefault();
+    var input = document.getElementById("cmd-input");
+    handleCommand(input.value);
+    input.value = "";
+    input.placeholder = "Say or type a command…";
+  });
+
+  // ---------------- Voice recognition ----------------
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var recognition = null;
+  var listening = false;
+  var voiceBlocked = false;
+
+  function disableVoice(reason){
+    voiceBlocked = true;
+    orbHint.textContent = "Voice input isn't available on this hosted page — type a command below instead";
+    logEntry("system", reason + " Typed commands work exactly the same, and I can still reply out loud.");
+  }
+
+  if (SR){
+    recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognition.onstart = function(){
+      listening = true;
+      setState("listening");
+    };
+    recognition.onresult = function(ev){
+      var res = ev.results[ev.results.length - 1];
+      var transcript = res[0].transcript;
+      document.getElementById("cmd-input").value = transcript;
+      if (res.isFinal){
+        handleCommand(transcript);
+        document.getElementById("cmd-input").value = "";
+      }
+    };
+    recognition.onerror = function(ev){
+      listening = false;
+      setState("idle");
+      if (!voiceBlocked && (ev.error === "not-allowed" || ev.error === "service-not-allowed" || ev.error === "network")){
+        disableVoice("Speech recognition needs a network connection this page's sandbox doesn't allow, so it can't turn your voice into text here.");
+      }
+    };
+    recognition.onend = function(){
+      listening = false;
+      if (!orb.classList.contains("speaking") && !orb.classList.contains("thinking")) setState("idle");
+    };
+  } else {
+    disableVoice("This browser doesn't support voice input.");
+  }
+
+  orb.addEventListener("click", function(){
+    if (!recognition || voiceBlocked){
+      document.getElementById("cmd-input").focus();
+      return;
+    }
+    if (listening){
+      recognition.stop();
+    } else {
+      try{ recognition.start(); }
+      catch(e){ /* already started */ }
+    }
+  });
+
+})();
+</script>
