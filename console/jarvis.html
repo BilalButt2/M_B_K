@@ -305,9 +305,36 @@
     0%{ filter: hue-rotate(0deg); }
     100%{ filter: hue-rotate(25deg); }
   }
+
+  /* ---------- Greeting surge — the "Daddy's home" wake-up reaction ---------- */
+  #orb.surge{ animation: surge 1.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes surge{
+    0%{ transform: scale(1); box-shadow: 0 0 30px 6px rgba(63,169,232,0.35), inset 0 0 30px rgba(0,0,0,0.5); }
+    18%{ transform: scale(1.14); box-shadow: 0 0 90px 30px rgba(189,241,255,0.85), inset 0 0 20px rgba(0,0,0,0.2); }
+    45%{ transform: scale(0.98); box-shadow: 0 0 60px 16px rgba(63,169,232,0.6), inset 0 0 30px rgba(0,0,0,0.4); }
+    100%{ transform: scale(1); box-shadow: 0 0 30px 6px rgba(63,169,232,0.35), inset 0 0 30px rgba(0,0,0,0.5); }
+  }
+  /* Expanding shockwave ring, spawned once per greeting */
+  .shockwave{
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--core);
+    pointer-events: none;
+    animation: shock 1.4s ease-out forwards;
+  }
+  @keyframes shock{
+    0%{ transform: scale(0.35); opacity: 0.9; border-width: 3px; }
+    100%{ transform: scale(1.9); opacity: 0; border-width: 1px; }
+  }
+  .orb-stage.surge .ring{ animation-duration: 2.2s !important; }
+  .frame.surge .bracket{ border-color: var(--core); box-shadow: 0 0 12px rgba(189,241,255,0.6); }
+  .bracket{ transition: border-color 0.6s, box-shadow 0.6s; }
+
   @media (prefers-reduced-motion: reduce){
     .ring{ animation: none !important; }
     .sweep{ animation: none !important; }
+    .shockwave{ animation: none !important; display: none; }
     #orb{ animation: none !important; }
   }
 
@@ -695,7 +722,8 @@
   }
 
   logEntry("system", "Console initialized.");
-  logEntry("jarvis", "Good to see you, " + GREETING_NAME + ". Systems are online. Say a command, or ask me anything.");
+  logEntry("jarvis", "Good to see you, " + GREETING_NAME + ". Systems are online.");
+  logEntry("system", 'Try: "Hello Jarvis, Daddy\'s home" · "batao kya chal raha hai" · "open gmail"');
 
   // ---------------- Orb state ----------------
   var orb = document.getElementById("orb");
@@ -899,6 +927,108 @@
   // not just "open it" — right now this only powers the Gmail check.
   var CHECK_RE = /\b(check|batao|bata|kiski|kis\s*ki|kisne|kis\s*ne|who|whose|new|naya|nai|unread|koi)\b/i;
 
+  // ---------------- Greeting ("Daddy's home") ----------------
+  // Speech recognition is set to en-US, so Roman Urdu comes back
+  // approximated in English spelling — these patterns are deliberately
+  // loose so a near-miss transcription still lands.
+  var GREET_RE = /\b(daddy'?s home|daddy home|papa'?s home|hello jarvis|hey jarvis|hi jarvis|hello jarvis|jarvis hello|salam|assalam)\b/i;
+
+  var GREETINGS = [
+    "Welcome home, " + GREETING_NAME + ". All systems are online.",
+    "Good to have you back, " + GREETING_NAME + ". Standing by.",
+    "Welcome back, " + GREETING_NAME + ". Everything's running."
+  ];
+
+  // The visible "reaction" — a power surge through the core, a shockwave
+  // ring, and the frame's corner brackets flaring — so a greeting feels
+  // answered by the machine, not just by a line of text.
+  function surge(){
+    var stage = document.getElementById("orb-stage");
+    var frame = document.querySelector(".frame");
+    orb.classList.remove("surge");
+    stage.classList.remove("surge");
+    frame.classList.remove("surge");
+    // Reflow so re-adding the class restarts the animation on a repeat greeting.
+    void orb.offsetWidth;
+    orb.classList.add("surge");
+    stage.classList.add("surge");
+    frame.classList.add("surge");
+
+    var wave = document.createElement("div");
+    wave.className = "shockwave";
+    stage.appendChild(wave);
+    setTimeout(function(){ if (wave.parentNode) wave.parentNode.removeChild(wave); }, 1500);
+    setTimeout(function(){
+      orb.classList.remove("surge");
+      stage.classList.remove("surge");
+      frame.classList.remove("surge");
+    }, 1700);
+  }
+
+  function greet(){
+    surge();
+    var line = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
+    logEntry("jarvis", line);
+    speak(line);
+  }
+
+  // ---------------- Status ("kya chal raha hai") ----------------
+  var STATUS_RE = /\b(kya\s*chal|chal\s*raha|kia\s*chal|what('?s|\s+is)\s*(going\s*on|up|happening)|going\s*on|status|kya\s*ho\s*raha|situation|report|pending|kaam)\b/i;
+  // Pending work — the same notes/tasks.md this repo uses as Jarvis's
+  // memory. On GitHub Pages that file sits at a real same-origin URL
+  // next to this page; as a local file or inside the claude.ai sandbox
+  // the fetch simply fails, and the status still reports everything else.
+  var TASKS_URL = "../notes/tasks.md";
+
+  function fetchPendingTasks(){
+    if (typeof fetch !== "function") return Promise.resolve(null);
+    return fetch(TASKS_URL, { cache: "no-store" })
+      .then(function(r){ return r.ok ? r.text() : null; })
+      .then(function(text){
+        if (!text) return null;
+        // Everything before "## Done" is live work; unchecked boxes are pending.
+        var live = text.split(/^##\s*Done/mi)[0];
+        var items = [];
+        live.split("\n").forEach(function(line){
+          var m = line.match(/^\s*-\s*\[\s\]\s*(.+)$/);
+          if (m){
+            // Keep it speakable: first sentence only, no trailing detail.
+            var t = m[1].split(/\.\s|\s—\s/)[0].trim();
+            items.push(t.length > 120 ? t.slice(0, 117) + "…" : t);
+          }
+        });
+        return items;
+      })
+      .catch(function(){ return null; });
+  }
+
+  function reportStatus(){
+    setState("thinking");
+    fetchPendingTasks().then(function(tasks){
+      setState("idle");
+      var elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+      var mins = Math.floor(elapsed / 60);
+      var uptime = mins < 1 ? "under a minute" : mins === 1 ? "a minute" : mins + " minutes";
+
+      logEntry("jarvis", "Systems nominal. " + Object.keys(KEY_INFO).length + " systems linked, online for " + uptime + ", " + logCount + " entries in the log.");
+
+      var spoken = "All systems nominal. I've been online for " + uptime + ".";
+
+      if (tasks === null){
+        logEntry("system", "Your task list isn't reachable from this copy of the page — it loads on the GitHub Pages version, where notes/tasks.md sits alongside it.");
+      } else if (!tasks.length){
+        logEntry("jarvis", "Nothing pending on your task list.");
+        spoken += " Nothing pending on your list.";
+      } else {
+        logEntry("jarvis", "Pending work — " + tasks.length + " item" + (tasks.length === 1 ? "" : "s") + ":");
+        tasks.forEach(function(t, i){ logEntry("jarvis", (i + 1) + ". " + t); });
+        spoken += " You have " + tasks.length + " pending item" + (tasks.length === 1 ? "" : "s") + ". " +
+                  tasks.slice(0, 3).join(". ") + ".";
+      }
+      speak(spoken);
+    });
+  }
+
   // ---------------- Gmail (real inbox, via the connected Gmail account) ----------------
   // Only reachable on the claude.ai-hosted copy of this page — that's the
   // only place with a bridge back to a connected account. The GitHub
@@ -969,6 +1099,16 @@
     var text = raw.trim();
     if (!text) return;
     logEntry("user", text);
+
+    // Greeting and status come before system-name matching: "mera kaam
+    // batao" contains "task"-adjacent words that would otherwise just
+    // open the task board instead of reading the list out.
+    if (GREET_RE.test(text)){
+      greet();
+      if (STATUS_RE.test(text)) reportStatus();
+      return;
+    }
+    if (STATUS_RE.test(text)){ reportStatus(); return; }
 
     // Any known system name, in either language, drives open/close first —
     // this is the deterministic, instant path and doesn't need Claude.
