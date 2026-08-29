@@ -36,7 +36,9 @@
     overflow-x: hidden;
     background-image:
       radial-gradient(ellipse at 50% -10%, rgba(63,169,232,0.10), transparent 55%),
-      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px),
+      repeating-linear-gradient(90deg, rgba(63,169,232,0.05) 0px, rgba(63,169,232,0.05) 1px, transparent 1px, transparent 64px),
+      repeating-linear-gradient(0deg, rgba(63,169,232,0.05) 0px, rgba(63,169,232,0.05) 1px, transparent 1px, transparent 64px);
   }
 
   ::selection{ background: var(--arc-dim); color: var(--core); }
@@ -112,6 +114,40 @@
     margin-right: 6px;
   }
   #clock{ color: var(--text); font-weight: 500; }
+
+  /* ---------- Telemetry strip — real, live readouts only, no invented numbers ---------- */
+  .telemetry{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .tele-tile{
+    background: var(--panel);
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .tele-label{
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .tele-value{
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--core);
+    letter-spacing: 0.03em;
+  }
+  @media (max-width: 640px){
+    .telemetry{ grid-template-columns: repeat(2, 1fr); }
+  }
 
   /* ---------- Main grid ---------- */
   .console{
@@ -244,18 +280,20 @@
     height: 58%;
     border-radius: 50%;
     border: none;
+    padding: 0;
     cursor: pointer;
-    background:
-      radial-gradient(circle at 50% 42%, #ffffff 0%, var(--core) 16%, var(--arc) 48%, var(--arc-dim) 78%, #08131c 100%);
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 50%, #0d2233 0%, #071019 70%, #050b12 100%);
     box-shadow:
       0 0 30px 6px rgba(63,169,232,0.35),
-      inset 0 0 30px rgba(0,0,0,0.35);
+      inset 0 0 30px rgba(0,0,0,0.5);
     transition: box-shadow 0.3s, transform 0.15s;
   }
+  #orb-canvas{ position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   #orb:active{ transform: scale(0.97); }
   #orb.listening{
     animation: pulse 1.4s ease-in-out infinite;
-    box-shadow: 0 0 55px 14px rgba(63,169,232,0.55), inset 0 0 30px rgba(0,0,0,0.3);
+    box-shadow: 0 0 55px 14px rgba(63,169,232,0.55), inset 0 0 30px rgba(0,0,0,0.4);
   }
   #orb.thinking{ animation: think 1s linear infinite; }
   #orb.speaking{ animation: pulse 0.5s ease-in-out infinite; }
@@ -427,6 +465,13 @@
     </div>
   </div>
 
+  <div class="telemetry" id="telemetry">
+    <div class="tele-tile"><span class="tele-label">Systems</span><span class="tele-value" id="tele-systems">—</span></div>
+    <div class="tele-tile"><span class="tele-label">Session</span><span class="tele-value font-mono" id="tele-session">00:00:00</span></div>
+    <div class="tele-tile"><span class="tele-label">Log Entries</span><span class="tele-value font-mono" id="tele-log">0</span></div>
+    <div class="tele-tile"><span class="tele-label">Voice Link</span><span class="tele-value" id="tele-voice">STANDBY</span></div>
+  </div>
+
   <div class="console">
     <!-- Left: quick systems -->
     <div class="panel">
@@ -443,7 +488,9 @@
           <div class="ring r2"></div>
           <div class="sweep"></div>
           <div class="ring r3"></div>
-          <button id="orb" aria-label="Talk to Jarvis"></button>
+          <button id="orb" aria-label="Talk to Jarvis">
+            <canvas id="orb-canvas"></canvas>
+          </button>
         </div>
         <div class="orb-caption">
           <div id="orb-state">STANDBY</div>
@@ -605,13 +652,23 @@
     setTimeout(function(){ btn.classList.remove("active"); }, 900);
   }
 
-  // ---------------- Clock ----------------
+  // ---------------- Clock + telemetry (real numbers only, nothing invented) ----------------
+  var sessionStart = Date.now();
+  var teleLog = document.getElementById("tele-log");
+  var teleVoice = document.getElementById("tele-voice");
+  var logCount = 0;
+
+  function pad2(n){ return n < 10 ? "0" + n : String(n); }
   function tick(){
     var d = new Date();
     document.getElementById("clock").textContent = d.toLocaleTimeString([], { hour12: false });
+    var elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+    var hh = Math.floor(elapsed / 3600), mm = Math.floor((elapsed % 3600) / 60), ss = elapsed % 60;
+    document.getElementById("tele-session").textContent = pad2(hh) + ":" + pad2(mm) + ":" + pad2(ss);
   }
   tick();
   setInterval(tick, 1000);
+  document.getElementById("tele-systems").textContent = Object.keys(KEY_INFO).length + " linked";
 
   // ---------------- Log ----------------
   var logEl = document.getElementById("log");
@@ -633,6 +690,8 @@
     }
     logEl.appendChild(e);
     logEl.scrollTop = logEl.scrollHeight;
+    logCount++;
+    teleLog.textContent = String(logCount);
   }
 
   logEntry("system", "Console initialized.");
@@ -647,8 +706,129 @@
     if (state !== "idle") orb.classList.add(state);
     var labels = { idle: "STANDBY", listening: "LISTENING…", thinking: "PROCESSING…", speaking: "RESPONDING…" };
     orbState.textContent = labels[state] || state.toUpperCase();
+    teleVoice.textContent = labels[state] || state.toUpperCase();
     if (hint) orbHint.textContent = hint;
   }
+
+  // ---------------- Holographic core (rotating wireframe globe) ----------------
+  (function(){
+    var canvas = document.getElementById("orb-canvas");
+    var ctx = canvas.getContext("2d");
+    var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var DPR = Math.min(window.devicePixelRatio || 1, 2);
+    var W = 0, H = 0, R = 0;
+
+    function resize(){
+      var rect = canvas.getBoundingClientRect();
+      W = rect.width; H = rect.height;
+      if (!W || !H) return;
+      canvas.width = Math.round(W * DPR);
+      canvas.height = Math.round(H * DPR);
+      R = Math.min(W, H) * 0.42;
+    }
+    window.addEventListener("resize", resize);
+    // The button's real size settles after layout/web-font load — a
+    // couple of delayed retries cover that without a ResizeObserver.
+    resize();
+    setTimeout(resize, 50);
+    setTimeout(resize, 400);
+
+    var LAT = 8, LON = 16;
+    var rings = (function build(){
+      var out = [];
+      for (var i = 0; i < LAT; i++){
+        var lat = (-65 + (130 * i / (LAT - 1))) * Math.PI / 180;
+        var ring = [];
+        for (var j = 0; j < LON; j++){
+          var lon = (j / LON) * Math.PI * 2;
+          ring.push({
+            x: Math.cos(lat) * Math.cos(lon),
+            y: Math.sin(lat),
+            z: Math.cos(lat) * Math.sin(lon)
+          });
+        }
+        out.push(ring);
+      }
+      return out;
+    })();
+
+    var angle = 0.6; // start at a flattering angle rather than face-on
+    var FOV = 2.6;
+
+    function project(p, cosA, sinA){
+      var x = p.x * cosA - p.z * sinA;
+      var z = p.x * sinA + p.z * cosA;
+      var scale = FOV / (FOV + z + 1.6);
+      return { sx: x * R * scale, sy: p.y * R * scale, z: z, scale: scale };
+    }
+    function speedFor(){
+      if (orb.classList.contains("thinking")) return 0.05;
+      if (orb.classList.contains("speaking")) return 0.035;
+      if (orb.classList.contains("listening")) return 0.022;
+      return 0.006;
+    }
+    function colorFor(){
+      return orb.classList.contains("thinking") ? "150,200,255" : "189,241,255";
+    }
+
+    function draw(){
+      if (W && H){
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        ctx.save();
+        ctx.translate(W / 2, H / 2);
+
+        if (!reduceMotion) angle += speedFor();
+        var cosA = Math.cos(angle), sinA = Math.sin(angle);
+        var rgb = colorFor();
+        var projRings = rings.map(function(ring){
+          return ring.map(function(p){ return project(p, cosA, sinA); });
+        });
+
+        // Latitude rings, dimmer on the far side of the globe for depth.
+        projRings.forEach(function(ring){
+          var avgZ = ring.reduce(function(s, pp){ return s + pp.z; }, 0) / ring.length;
+          ctx.beginPath();
+          ring.forEach(function(pp, idx){
+            if (idx === 0) ctx.moveTo(pp.sx, pp.sy); else ctx.lineTo(pp.sx, pp.sy);
+          });
+          ctx.closePath();
+          ctx.strokeStyle = "rgba(" + rgb + "," + (0.08 + 0.22 * ((avgZ + 1) / 2)).toFixed(3) + ")";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        });
+
+        // Longitude lines, pole to pole.
+        for (var j = 0; j < LON; j++){
+          ctx.beginPath();
+          for (var i = 0; i < LAT; i++){
+            var pp = projRings[i][j];
+            if (i === 0) ctx.moveTo(pp.sx, pp.sy); else ctx.lineTo(pp.sx, pp.sy);
+          }
+          var mid = projRings[Math.floor(LAT / 2)][j];
+          ctx.strokeStyle = "rgba(" + rgb + "," + (0.08 + 0.22 * ((mid.z + 1) / 2)).toFixed(3) + ")";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // Bright vertex points on the near hemisphere only.
+        projRings.forEach(function(ring){
+          ring.forEach(function(pp){
+            if (pp.z > 0.1){
+              ctx.beginPath();
+              ctx.fillStyle = "rgba(" + rgb + "," + Math.min(1, (pp.z + 1) / 2).toFixed(3) + ")";
+              ctx.arc(pp.sx, pp.sy, 1.1 * pp.scale + 0.25, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+        });
+
+        ctx.restore();
+      }
+      requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
+  })();
 
   // ---------------- Speech synthesis (spoken replies) ----------------
   var muted = false;
